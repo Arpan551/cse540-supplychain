@@ -7,3 +7,4 @@ coverage.json
 typechain-types/
 frontend/node_modules/
 frontend/build/
+frontend/dist/
