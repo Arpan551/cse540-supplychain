@@ -3,11 +3,12 @@
 // Connects to MetaMask, reads live on-chain data from ProductRegistry
 // and VerificationLog contracts deployed on Hardhat local network or Sepolia.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useContracts, CONTRACT_ADDRESSES } from "./useContracts.js";
 import ProvenanceTimeline from "./components/ProvenanceTimeline.jsx";
 import RegisterProduct from "./components/RegisterProduct.jsx";
 import TransferCustody from "./components/TransferCustody.jsx";
+import ConfirmDelivery from "./components/ConfirmDelivery.jsx";
 import styles from "./App.module.css";
 
 const STATUS_LABELS = ["Registered", "Shipped", "InStorage", "Delivered", "Flagged"];
@@ -17,16 +18,25 @@ export default function App() {
   const { account, signer, provider, error: walletError, connect, registry, verificationLog } =
     useContracts();
 
-  const [tab, setTab]             = useState("lookup");
-  const [productId, setProductId] = useState("");
-  const [product, setProduct]     = useState(null);
-  const [history, setHistory]     = useState([]);
-  const [certs, setCerts]         = useState([]);
-  const [loading, setLoading]     = useState(false);
-  const [statusMsg, setStatusMsg] = useState("");
+  const [tab, setTab]               = useState("lookup");
+  const [productId, setProductId]   = useState("");
+  const [product, setProduct]       = useState(null);
+  const [history, setHistory]       = useState([]);
+  const [certs, setCerts]           = useState([]);
+  const [loading, setLoading]       = useState(false);
+  const [statusMsg, setStatusMsg]   = useState("");
+  const [totalProducts, setTotal]   = useState(null);
 
   const addressesConfigured =
     CONTRACT_ADDRESSES.productRegistry && CONTRACT_ADDRESSES.verificationLog;
+
+  // Fetch total product count whenever the registry becomes available
+  useEffect(() => {
+    if (!registry) return;
+    registry.totalProducts()
+      .then((n) => setTotal(Number(n)))
+      .catch(() => {});
+  }, [registry]);
 
   async function lookupProduct() {
     if (!registry) { setStatusMsg("Connect wallet first."); return; }
@@ -76,6 +86,8 @@ export default function App() {
         }))
       );
 
+      // Refresh total after a lookup (in case a new product was just registered)
+      registry.totalProducts().then((n) => setTotal(Number(n))).catch(() => {});
       setStatusMsg(`Product ${productId} loaded.`);
     } catch (err) {
       setStatusMsg("Error: " + (err.reason || err.message));
@@ -87,8 +99,16 @@ export default function App() {
   return (
     <div className={styles.app}>
       <header className={styles.header}>
-        <h1>Supply Chain Provenance</h1>
-        <p className={styles.subtitle}>CSE 540 · Group 20 · Ethereum + IPFS</p>
+        <div>
+          <h1>Supply Chain Provenance</h1>
+          <p className={styles.subtitle}>CSE 540 · Group 20 · Ethereum + IPFS</p>
+        </div>
+        {totalProducts !== null && (
+          <div className={styles.stat}>
+            <span className={styles.statNum}>{totalProducts}</span>
+            <span className={styles.statLabel}>products on-chain</span>
+          </div>
+        )}
       </header>
 
       {/* Wallet bar */}
@@ -116,24 +136,20 @@ export default function App() {
 
       {/* Tab nav */}
       <nav className={styles.tabs}>
-        <button
-          className={tab === "lookup" ? styles.tabActive : styles.tab}
-          onClick={() => setTab("lookup")}
-        >
-          Lookup Product
-        </button>
-        <button
-          className={tab === "register" ? styles.tabActive : styles.tab}
-          onClick={() => setTab("register")}
-        >
-          Register Product
-        </button>
-        <button
-          className={tab === "transfer" ? styles.tabActive : styles.tab}
-          onClick={() => setTab("transfer")}
-        >
-          Transfer Custody
-        </button>
+        {[
+          ["lookup",   "Lookup Product"],
+          ["register", "Register Product"],
+          ["transfer", "Transfer Custody"],
+          ["deliver",  "Confirm Delivery"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            className={tab === key ? styles.tabActive : styles.tab}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
 
       {/* ── Tab: Lookup ── */}
@@ -151,6 +167,7 @@ export default function App() {
               placeholder="Product ID"
               value={productId}
               onChange={(e) => setProductId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && lookupProduct()}
               className={styles.input}
             />
             <button
@@ -218,6 +235,7 @@ export default function App() {
             registry={registry}
             signer={signer}
             onSuccess={(id) => {
+              setTotal((t) => (t !== null ? t + 1 : t));
               setTab("lookup");
               setProductId(id.toString());
             }}
@@ -229,6 +247,13 @@ export default function App() {
       {tab === "transfer" && (
         <section className={styles.section}>
           <TransferCustody registry={registry} signer={signer} />
+        </section>
+      )}
+
+      {/* ── Tab: Confirm Delivery ── */}
+      {tab === "deliver" && (
+        <section className={styles.section}>
+          <ConfirmDelivery registry={registry} signer={signer} />
         </section>
       )}
     </div>
