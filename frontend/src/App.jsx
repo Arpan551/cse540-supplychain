@@ -1,79 +1,236 @@
 // frontend/src/App.jsx
-// Entry point for the React frontend.
-// Connects to MetaMask, reads product data from the ProductRegistry contract,
-// and allows authorized stakeholders to register products and update statuses.
+// Supply Chain Provenance System — CSE 540 Group 20
+// Connects to MetaMask, reads live on-chain data from ProductRegistry
+// and VerificationLog contracts deployed on Hardhat local network or Sepolia.
 
 import { useState } from "react";
-import { ethers }   from "ethers";
+import { useContracts, CONTRACT_ADDRESSES } from "./useContracts.js";
+import ProvenanceTimeline from "./components/ProvenanceTimeline.jsx";
+import RegisterProduct from "./components/RegisterProduct.jsx";
+import TransferCustody from "./components/TransferCustody.jsx";
+import styles from "./App.module.css";
 
-// TODO: Replace with actual deployed contract addresses after deployment
-const CONTRACT_ADDRESSES = {
-  productRegistry: "0x0000000000000000000000000000000000000000",
-  verificationLog: "0x0000000000000000000000000000000000000000",
-};
+const STATUS_LABELS = ["Registered", "Shipped", "InStorage", "Delivered", "Flagged"];
+const STATUS_COLORS = ["#6c757d", "#0d6efd", "#0dcaf0", "#198754", "#dc3545"];
 
 export default function App() {
-  const [account,  setAccount]  = useState(null);
-  const [provider, setProvider] = useState(null);
+  const { account, signer, provider, error: walletError, connect, registry, verificationLog } =
+    useContracts();
+
+  const [tab, setTab]             = useState("lookup");
   const [productId, setProductId] = useState("");
-  const [productData, setProductData] = useState(null);
-  const [status, setStatus] = useState("");
+  const [product, setProduct]     = useState(null);
+  const [history, setHistory]     = useState([]);
+  const [certs, setCerts]         = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
 
-  // Connect MetaMask wallet
-  async function connectWallet() {
-    if (!window.ethereum) {
-      alert("MetaMask not detected. Please install MetaMask.");
-      return;
-    }
-    const web3Provider = new ethers.BrowserProvider(window.ethereum);
-    await web3Provider.send("eth_requestAccounts", []);
-    const signer = await web3Provider.getSigner();
-    setProvider(web3Provider);
-    setAccount(await signer.getAddress());
-    setStatus("Wallet connected.");
-  }
+  const addressesConfigured =
+    CONTRACT_ADDRESSES.productRegistry && CONTRACT_ADDRESSES.verificationLog;
 
-  // Look up product provenance by product ID
   async function lookupProduct() {
-    if (!provider) { setStatus("Connect wallet first."); return; }
-    setStatus(`Looking up product ID ${productId}...`);
-    // TODO: Instantiate ProductRegistry contract with ABI and address, then call getProduct()
-    setProductData({ note: "Contract call placeholder — full implementation coming at midterm." });
-    setStatus("Done.");
+    if (!registry) { setStatusMsg("Connect wallet first."); return; }
+    if (!productId) { setStatusMsg("Enter a product ID."); return; }
+    setLoading(true);
+    setStatusMsg("");
+    setProduct(null);
+    setHistory([]);
+    setCerts([]);
+
+    try {
+      const p = await registry.getProduct(Number(productId));
+      const h = await registry.getHistory(Number(productId));
+      const certIds = await verificationLog.getCertificationsForProduct(Number(productId));
+      const certData = await Promise.all(
+        certIds.map((id) => verificationLog.getCertification(id))
+      );
+
+      setProduct({
+        id: p.id.toString(),
+        batchId: p.batchId,
+        currentOwner: p.currentOwner,
+        status: Number(p.status),
+        metadataCID: p.metadataCID,
+        createdAt: new Date(Number(p.createdAt) * 1000).toLocaleString(),
+        updatedAt: new Date(Number(p.updatedAt) * 1000).toLocaleString(),
+      });
+
+      setHistory(
+        h.map((entry) => ({
+          actor: entry.actor,
+          statusBefore: Number(entry.statusBefore),
+          statusAfter: Number(entry.statusAfter),
+          note: entry.note,
+          timestamp: new Date(Number(entry.timestamp) * 1000).toLocaleString(),
+        }))
+      );
+
+      setCerts(
+        certData.map((c, i) => ({
+          certId: certIds[i].toString(),
+          certType: c.certType,
+          issuedBy: c.issuedBy,
+          documentCID: c.documentCID,
+          isValid: c.isValid,
+          issuedAt: new Date(Number(c.issuedAt) * 1000).toLocaleString(),
+        }))
+      );
+
+      setStatusMsg(`Product ${productId} loaded.`);
+    } catch (err) {
+      setStatusMsg("Error: " + (err.reason || err.message));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div style={{ fontFamily: "sans-serif", maxWidth: 700, margin: "40px auto", padding: "0 20px" }}>
-      <h1>Supply Chain Provenance System</h1>
-      <p>CSE 540 Group 20 — Blockchain-Based Supply Chain Provenance</p>
+    <div className={styles.app}>
+      <header className={styles.header}>
+        <h1>Supply Chain Provenance</h1>
+        <p className={styles.subtitle}>CSE 540 · Group 20 · Ethereum + IPFS</p>
+      </header>
 
-      <hr />
+      {/* Wallet bar */}
+      <div className={styles.walletBar}>
+        {account ? (
+          <span className={styles.connected}>
+            Connected: {account.slice(0, 6)}…{account.slice(-4)}
+          </span>
+        ) : (
+          <button className={styles.btnPrimary} onClick={connect}>
+            Connect MetaMask
+          </button>
+        )}
+        {walletError && <span className={styles.error}>{walletError}</span>}
+      </div>
 
-      {!account ? (
-        <button onClick={connectWallet}>Connect MetaMask</button>
-      ) : (
-        <p>Connected: {account}</p>
+      {/* Contract address warning */}
+      {!addressesConfigured && (
+        <div className={styles.warning}>
+          Contract addresses not configured. Set <code>VITE_PRODUCT_REGISTRY</code> and{" "}
+          <code>VITE_VERIFICATION_LOG</code> in <code>frontend/.env</code> then restart Vite.
+          (See <code>deployed-addresses.json</code> after running deploy.js.)
+        </div>
       )}
 
-      <hr />
+      {/* Tab nav */}
+      <nav className={styles.tabs}>
+        <button
+          className={tab === "lookup" ? styles.tabActive : styles.tab}
+          onClick={() => setTab("lookup")}
+        >
+          Lookup Product
+        </button>
+        <button
+          className={tab === "register" ? styles.tabActive : styles.tab}
+          onClick={() => setTab("register")}
+        >
+          Register Product
+        </button>
+        <button
+          className={tab === "transfer" ? styles.tabActive : styles.tab}
+          onClick={() => setTab("transfer")}
+        >
+          Transfer Custody
+        </button>
+      </nav>
 
-      <h2>Look Up Product</h2>
-      <input
-        type="number"
-        placeholder="Enter Product ID"
-        value={productId}
-        onChange={e => setProductId(e.target.value)}
-        style={{ marginRight: 8 }}
-      />
-      <button onClick={lookupProduct}>Lookup</button>
+      {/* ── Tab: Lookup ── */}
+      {tab === "lookup" && (
+        <section className={styles.section}>
+          <h2>Product Provenance Lookup</h2>
+          <p className={styles.hint}>
+            Anyone can look up a product's full on-chain journey. Enter a product ID (e.g. 1, 2, 3
+            after running seed.js).
+          </p>
+          <div className={styles.row}>
+            <input
+              type="number"
+              min="1"
+              placeholder="Product ID"
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              className={styles.input}
+            />
+            <button
+              className={styles.btnPrimary}
+              onClick={lookupProduct}
+              disabled={loading}
+            >
+              {loading ? "Loading…" : "Lookup"}
+            </button>
+          </div>
 
-      {productData && (
-        <pre style={{ background: "#f4f4f4", padding: 12, borderRadius: 4 }}>
-          {JSON.stringify(productData, null, 2)}
-        </pre>
+          {statusMsg && <p className={styles.status}>{statusMsg}</p>}
+
+          {product && (
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <h3>Product #{product.id} — {product.batchId}</h3>
+                <span
+                  className={styles.badge}
+                  style={{ background: STATUS_COLORS[product.status] }}
+                >
+                  {STATUS_LABELS[product.status]}
+                </span>
+              </div>
+              <dl className={styles.dl}>
+                <dt>Current Owner</dt>
+                <dd className={styles.mono}>{product.currentOwner}</dd>
+                <dt>Metadata (IPFS)</dt>
+                <dd className={styles.mono}>{product.metadataCID || "—"}</dd>
+                <dt>Registered</dt>
+                <dd>{product.createdAt}</dd>
+                <dt>Last Updated</dt>
+                <dd>{product.updatedAt}</dd>
+              </dl>
+
+              {/* Certifications */}
+              {certs.length > 0 && (
+                <>
+                  <h4>Certifications</h4>
+                  <ul className={styles.certList}>
+                    {certs.map((c) => (
+                      <li key={c.certId} className={c.isValid ? styles.certValid : styles.certRevoked}>
+                        <strong>{c.certType}</strong> (cert #{c.certId})
+                        {" "}{c.isValid ? "✓ Valid" : "✗ Revoked"} · {c.issuedAt}
+                        <br />
+                        <span className={styles.mono}>{c.documentCID}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* Provenance timeline */}
+              <h4>Provenance History ({history.length} events)</h4>
+              <ProvenanceTimeline history={history} statusLabels={STATUS_LABELS} />
+            </div>
+          )}
+        </section>
       )}
 
-      {status && <p><em>{status}</em></p>}
+      {/* ── Tab: Register ── */}
+      {tab === "register" && (
+        <section className={styles.section}>
+          <RegisterProduct
+            registry={registry}
+            signer={signer}
+            onSuccess={(id) => {
+              setTab("lookup");
+              setProductId(id.toString());
+            }}
+          />
+        </section>
+      )}
+
+      {/* ── Tab: Transfer ── */}
+      {tab === "transfer" && (
+        <section className={styles.section}>
+          <TransferCustody registry={registry} signer={signer} />
+        </section>
+      )}
     </div>
   );
 }

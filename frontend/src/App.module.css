@@ -1,0 +1,241 @@
+/* App.module.css */
+:root {
+  --brand: #0d6efd;
+  --bg: #f8f9fa;
+  --surface: #ffffff;
+  --border: #dee2e6;
+  --text: #212529;
+  --muted: #6c757d;
+}
+
+.app {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+.header {
+  padding: 32px 0 16px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.header h1 {
+  margin: 0 0 4px;
+  font-size: 1.8rem;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.walletBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.connected {
+  background: #d1e7dd;
+  color: #0f5132;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.warning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.875rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid var(--border);
+}
+
+.tab, .tabActive {
+  padding: 8px 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s;
+}
+
+.tab { color: var(--muted); }
+
+.tabActive {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+  font-weight: 600;
+}
+
+.section h2 {
+  margin-top: 0;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.input {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  flex: 1;
+  max-width: 240px;
+}
+
+.inputFull {
+  composes: input;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.btnPrimary {
+  padding: 8px 18px;
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btnSecondary {
+  padding: 8px 18px;
+  background: #fff;
+  color: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.status {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.error {
+  color: #dc3545;
+  font-size: 0.875rem;
+}
+
+.success {
+  color: #198754;
+  font-size: 0.875rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-top: 16px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cardHeader h3 {
+  margin: 0;
+  flex: 1;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 6px 12px;
+  font-size: 0.875rem;
+  margin-bottom: 20px;
+}
+
+.dl dt { color: var(--muted); align-self: start; padding-top: 2px; }
+.dl dd { margin: 0; word-break: break-all; }
+
+.mono {
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.8rem;
+}
+
+.certList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.certValid, .certRevoked {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.certValid  { background: #d1e7dd; border: 1px solid #a3cfbb; }
+.certRevoked { background: #f8d7da; border: 1px solid #f1aeb5; }
+
+/* Form styles (used in sub-components) */
+.formGroup {
+  margin-bottom: 14px;
+}
+
+.label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.formNote {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}

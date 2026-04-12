@@ -1,0 +1,79 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "certId", "type": "uint256" },
+      { "indexed": true, "internalType": "uint256", "name": "productId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "issuedBy", "type": "address" },
+      { "indexed": false, "internalType": "string", "name": "certType", "type": "string" },
+      { "indexed": false, "internalType": "string", "name": "documentCID", "type": "string" }
+    ],
+    "name": "CertificationIssued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "certId", "type": "uint256" },
+      { "indexed": true, "internalType": "uint256", "name": "productId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "revokedBy", "type": "address" }
+    ],
+    "name": "CertificationRevoked",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "productId", "type": "uint256" },
+      { "internalType": "string", "name": "certType", "type": "string" },
+      { "internalType": "string", "name": "documentCID", "type": "string" },
+      { "internalType": "uint256", "name": "expiresAt", "type": "uint256" }
+    ],
+    "name": "issueCertification",
+    "outputs": [{ "internalType": "uint256", "name": "certId", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "certId", "type": "uint256" }],
+    "name": "revokeCertification",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "certId", "type": "uint256" }],
+    "name": "getCertification",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "uint256", "name": "productId", "type": "uint256" },
+          { "internalType": "address", "name": "issuedBy", "type": "address" },
+          { "internalType": "string", "name": "certType", "type": "string" },
+          { "internalType": "string", "name": "documentCID", "type": "string" },
+          { "internalType": "bool", "name": "isValid", "type": "bool" },
+          { "internalType": "uint256", "name": "issuedAt", "type": "uint256" },
+          { "internalType": "uint256", "name": "expiresAt", "type": "uint256" }
+        ],
+        "internalType": "struct VerificationLog.Certification",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "productId", "type": "uint256" }],
+    "name": "getCertificationsForProduct",
+    "outputs": [{ "internalType": "uint256[]", "name": "", "type": "uint256[]" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalCertifications",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
