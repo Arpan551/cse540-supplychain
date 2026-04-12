@@ -1,4 +1,3 @@
-```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
@@ -36,8 +35,18 @@ contract VerificationLog {
 
     // --- Events ---
 
-    event CertificationIssued(uint256 indexed certId, uint256 indexed productId, address indexed issuedBy, string certType, string documentCID);
-    event CertificationRevoked(uint256 indexed certId, uint256 indexed productId, address indexed revokedBy);
+    event CertificationIssued(
+        uint256 indexed certId,
+        uint256 indexed productId,
+        address indexed issuedBy,
+        string certType,
+        string documentCID
+    );
+    event CertificationRevoked(
+        uint256 indexed certId,
+        uint256 indexed productId,
+        address indexed revokedBy
+    );
 
     // Takes AccessControl address on deploy
     constructor(address accessControlAddress) {
@@ -110,4 +119,3 @@ contract VerificationLog {
         return _certCounter;
     }
 }
-```

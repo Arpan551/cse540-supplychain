@@ -70,11 +70,6 @@ contract ProductRegistry {
         _;
     }
 
-    modifier onlyDistributor() {
-        require(accessControl.isDistributor(msg.sender), "not a distributor");
-        _;
-    }
-
     modifier onlyRetailer() {
         require(accessControl.isRetailer(msg.sender), "not a retailer");
         _;
@@ -118,12 +113,15 @@ contract ProductRegistry {
         emit ProductRegistered(productId, batchId, msg.sender, metadataCID);
     }
 
-    // Distributor hands off custody to the next party in the chain
+    // Current owner (producer on first transfer, distributor afterwards) hands off custody
     function transferCustody(
         uint256 productId,
         address newOwner,
         string calldata note
-    ) external onlyDistributor productExists(productId) {
+    ) external productExists(productId) {
+        bool authorized = accessControl.isProducer(msg.sender)
+            || accessControl.isDistributor(msg.sender);
+        require(authorized, "not a producer or distributor");
         require(newOwner != address(0), "invalid address");
         require(_products[productId].currentOwner == msg.sender, "not current owner");
 
