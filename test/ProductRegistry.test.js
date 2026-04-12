@@ -1,5 +1,5 @@
 // test/ProductRegistry.test.js
-// Basic unit tests for the ProductRegistry contract.
+// Unit tests for ProductRegistry covering the full supply chain flow.
 // Run with: npx hardhat test
 
 const { expect } = require("chai");
@@ -7,76 +7,190 @@ const { ethers }  = require("hardhat");
 
 describe("ProductRegistry", function () {
   let accessControl, productRegistry;
-  let deployer, producer, distributor, retailer, consumer;
+  let deployer, producer, distributor, retailer, regulator, consumer;
 
-  // Deploy fresh contracts before each test
   beforeEach(async function () {
-    [deployer, producer, distributor, retailer, consumer] = await ethers.getSigners();
+    [deployer, producer, distributor, retailer, regulator, consumer] =
+      await ethers.getSigners();
 
-    // Deploy AccessControl and assign roles
     const AC = await ethers.getContractFactory("SupplyChainAccessControl");
     accessControl = await AC.deploy();
 
     await accessControl.addProducer(producer.address);
     await accessControl.addDistributor(distributor.address);
     await accessControl.addRetailer(retailer.address);
+    await accessControl.addRegulator(regulator.address);
 
-    // Deploy ProductRegistry with AccessControl address
     const PR = await ethers.getContractFactory("ProductRegistry");
     productRegistry = await PR.deploy(await accessControl.getAddress());
   });
 
   // ── Registration ──────────────────────────────────────────────────────────
 
-  it("should allow a producer to register a product", async function () {
+  it("allows a producer to register a product", async function () {
     await expect(
-      productRegistry.connect(producer).registerProduct("BATCH-001", "ipfs://Qm...")
+      productRegistry.connect(producer).registerProduct("BATCH-001", "ipfs://QmTest")
     ).to.emit(productRegistry, "ProductRegistered");
 
     const product = await productRegistry.getProduct(1);
     expect(product.batchId).to.equal("BATCH-001");
     expect(product.currentOwner).to.equal(producer.address);
+    expect(product.status).to.equal(0); // Status.Registered
   });
 
-  it("should reject registration from a non-producer address", async function () {
+  it("rejects registration from a non-producer", async function () {
     await expect(
-      productRegistry.connect(consumer).registerProduct("BATCH-002", "ipfs://Qm...")
-    ).to.be.revertedWith("ProductRegistry: caller is not a producer");
+      productRegistry.connect(consumer).registerProduct("BATCH-002", "ipfs://QmTest")
+    ).to.be.revertedWith("not a producer");
+  });
+
+  it("rejects empty batchId", async function () {
+    await expect(
+      productRegistry.connect(producer).registerProduct("", "ipfs://QmTest")
+    ).to.be.revertedWith("batchId cannot be empty");
+  });
+
+  it("increments totalProducts on each registration", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-A", "ipfs://Qm1");
+    await productRegistry.connect(producer).registerProduct("BATCH-B", "ipfs://Qm2");
+    expect(await productRegistry.totalProducts()).to.equal(2);
   });
 
   // ── Custody Transfer ──────────────────────────────────────────────────────
 
-  it("should allow a distributor to transfer custody", async function () {
-    // Producer registers first
-    await productRegistry.connect(producer).registerProduct("BATCH-003", "ipfs://Qm...");
+  it("allows producer to transfer custody to a distributor", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-003", "ipfs://QmTest");
 
-    // Simulate custody starting with distributor
-    // (In a real flow, producer transfers to distributor first)
-    // For this draft test we override the owner via a status update scenario.
-    // Full ownership flow test to be added in midterm sprint.
+    await expect(
+      productRegistry.connect(producer).transferCustody(
+        1, distributor.address, "Shipped from factory"
+      )
+    )
+      .to.emit(productRegistry, "CustodyTransferred")
+      .withArgs(1, producer.address, distributor.address);
+
+    const product = await productRegistry.getProduct(1);
+    expect(product.currentOwner).to.equal(distributor.address);
+    expect(product.status).to.equal(1); // Status.Shipped
+  });
+
+  it("allows distributor to forward custody onward", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-004", "ipfs://QmTest");
+    await productRegistry.connect(producer).transferCustody(
+      1, distributor.address, "To distributor"
+    );
+    // Distributor now owns it and can forward to retailer (or another distributor)
+    await expect(
+      productRegistry.connect(distributor).transferCustody(
+        1, retailer.address, "To retailer warehouse"
+      )
+    ).to.emit(productRegistry, "CustodyTransferred");
+
+    const product = await productRegistry.getProduct(1);
+    expect(product.currentOwner).to.equal(retailer.address);
+  });
+
+  it("rejects transfer from non-owner", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-005", "ipfs://QmTest");
+    await expect(
+      productRegistry.connect(distributor).transferCustody(
+        1, retailer.address, "Unauthorized"
+      )
+    ).to.be.revertedWith("not current owner");
+  });
+
+  it("rejects transfer by unauthorized role (consumer)", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-006", "ipfs://QmTest");
+    await expect(
+      productRegistry.connect(consumer).transferCustody(
+        1, retailer.address, "Unauthorized"
+      )
+    ).to.be.revertedWith("not a producer or distributor");
   });
 
   // ── Status Update ─────────────────────────────────────────────────────────
 
-  it("should allow an authorized stakeholder to update product status", async function () {
-    await productRegistry.connect(producer).registerProduct("BATCH-004", "ipfs://Qm...");
-
+  it("allows an authorized stakeholder to update product status", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-007", "ipfs://QmTest");
     await expect(
-      productRegistry.connect(producer).updateStatus(1, 1, "Shipped from warehouse A")
+      productRegistry.connect(producer).updateStatus(1, 2, "Moved to cold storage")
+    ).to.emit(productRegistry, "StatusUpdated").withArgs(1, 2, producer.address);
+  });
+
+  it("allows regulator to update status", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-008", "ipfs://QmTest");
+    await expect(
+      productRegistry.connect(regulator).updateStatus(1, 4, "Flagged for inspection")
     ).to.emit(productRegistry, "StatusUpdated");
+  });
+
+  it("rejects status update from consumer", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-009", "ipfs://QmTest");
+    await expect(
+      productRegistry.connect(consumer).updateStatus(1, 1, "Unauthorized")
+    ).to.be.revertedWith("not an authorized stakeholder");
+  });
+
+  // ── Delivery Confirmation ─────────────────────────────────────────────────
+
+  it("allows retailer to confirm delivery", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-010", "ipfs://QmTest");
+    await expect(
+      productRegistry.connect(retailer).confirmDelivery(1, "Received at store")
+    ).to.emit(productRegistry, "DeliveryConfirmed").withArgs(1, retailer.address);
+
+    const product = await productRegistry.getProduct(1);
+    expect(product.status).to.equal(3); // Status.Delivered
+  });
+
+  it("rejects delivery confirmation from non-retailer", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-011", "ipfs://QmTest");
+    await expect(
+      productRegistry.connect(consumer).confirmDelivery(1, "Unauthorized")
+    ).to.be.revertedWith("not a retailer");
+  });
+
+  // ── Full Supply Chain Flow ────────────────────────────────────────────────
+
+  it("records provenance history across the full supply chain", async function () {
+    // 1. Producer registers
+    await productRegistry.connect(producer).registerProduct("BATCH-FULL", "ipfs://QmDoc");
+    // 2. Producer ships to distributor
+    await productRegistry.connect(producer).transferCustody(
+      1, distributor.address, "Left factory"
+    );
+    // 3. Distributor ships to retailer
+    await productRegistry.connect(distributor).transferCustody(
+      1, retailer.address, "Arrived at distribution center"
+    );
+    // 4. Retailer confirms delivery
+    await productRegistry.connect(retailer).confirmDelivery(1, "On shelf");
+
+    const history = await productRegistry.getHistory(1);
+    expect(history.length).to.equal(4);
+    expect(history[0].note).to.equal("Product registered by producer");
+    expect(history[3].note).to.equal("On shelf");
+
+    const product = await productRegistry.getProduct(1);
+    expect(product.status).to.equal(3); // Delivered
   });
 
   // ── Read Functions ────────────────────────────────────────────────────────
 
-  it("should return the provenance history for a product", async function () {
-    await productRegistry.connect(producer).registerProduct("BATCH-005", "ipfs://Qm...");
+  it("returns provenance history starting with the registration entry", async function () {
+    await productRegistry.connect(producer).registerProduct("BATCH-H", "ipfs://QmTest");
     const history = await productRegistry.getHistory(1);
     expect(history.length).to.equal(1);
     expect(history[0].note).to.equal("Product registered by producer");
   });
 
-  it("should revert getProduct for a non-existent product ID", async function () {
+  it("reverts getProduct for a non-existent product ID", async function () {
     await expect(productRegistry.getProduct(999))
-      .to.be.revertedWith("ProductRegistry: product does not exist");
+      .to.be.revertedWith("product not found");
+  });
+
+  it("reverts getHistory for a non-existent product ID", async function () {
+    await expect(productRegistry.getHistory(999))
+      .to.be.revertedWith("product not found");
   });
 });
