@@ -12,6 +12,7 @@ import TransferCustody from "./components/TransferCustody.jsx";
 import ConfirmDelivery from "./components/ConfirmDelivery.jsx";
 import styles from "./App.module.css";
 
+//app module.css
 const STATUS_LABELS = ["Registered", "Shipped", "InStorage", "Delivered", "Flagged"];
 const STATUS_COLORS = ["#6c757d", "#0d6efd", "#0dcaf0", "#198754", "#dc3545"];
 
