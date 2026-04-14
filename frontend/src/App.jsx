@@ -3,6 +3,7 @@
 // Connects to MetaMask, reads live on-chain data from ProductRegistry
 // and VerificationLog contracts deployed on Hardhat local network or Sepolia.
 
+//testing
 import { useState, useEffect } from "react";
 import { useContracts, CONTRACT_ADDRESSES } from "./useContracts.js";
 import ProvenanceTimeline from "./components/ProvenanceTimeline.jsx";
