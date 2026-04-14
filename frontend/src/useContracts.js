@@ -47,6 +47,7 @@ export function useContracts() {
     );
   }
 
+  //function verficiation get helper method
   function getVerificationLog(signerOrProvider) {
     const conn = signerOrProvider || provider;
     if (!conn || !CONTRACT_ADDRESSES.verificationLog) return null;
