@@ -3,6 +3,10 @@
 // Connects to MetaMask, reads live on-chain data from ProductRegistry
 // and VerificationLog contracts deployed on Hardhat local network or Sepolia.
 
+<<<<<<< HEAD
+=======
+//testing
+>>>>>>> 0b8dcc4a1f2cc5c6afd970d89a91e8bd1ea2e432
 import { useState, useEffect } from "react";
 import { useContracts, CONTRACT_ADDRESSES } from "./useContracts.js";
 import ProvenanceTimeline from "./components/ProvenanceTimeline.jsx";
@@ -11,6 +15,10 @@ import TransferCustody from "./components/TransferCustody.jsx";
 import ConfirmDelivery from "./components/ConfirmDelivery.jsx";
 import styles from "./App.module.css";
 
+<<<<<<< HEAD
+=======
+//app module.css
+>>>>>>> 0b8dcc4a1f2cc5c6afd970d89a91e8bd1ea2e432
 const STATUS_LABELS = ["Registered", "Shipped", "InStorage", "Delivered", "Flagged"];
 const STATUS_COLORS = ["#6c757d", "#0d6efd", "#0dcaf0", "#198754", "#dc3545"];
 
