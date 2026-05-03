@@ -5,84 +5,115 @@ import "./AccessControl.sol";
 
 /**
  * @title ProductRegistry
- * @notice Core contract for tracking products through the supply chain.
- * Producers register products, distributors transfer custody,
- * retailers confirm delivery. All changes are logged on-chain permanently.
+ *
+ * This is the main contract. It keeps track of every product in the supply chain
+ * and records everything that happens to it — who registered it, who shipped it,
+ * where it's been, and when it was finally delivered.
+ *
+ * A product goes through these stages:
+ *   Registered → Shipped → InStorage → Delivered
+ *   (or Flagged at any point if there's a quality problem)
+ *
+ * Every time something happens to a product, we add an entry to its history list.
+ * That history lives on the blockchain permanently — nobody can delete or edit it.
+ *
+ * Why we store history in an array (not just events):
+ *   We want the frontend to be able to call getHistory() and get back the whole
+ *   trail in one go. If we only emitted events, the frontend would have to scan
+ *   every block from the beginning to rebuild the history — that's slow and complex.
+ *   Storing it on-chain costs a bit more gas but makes reading much simpler.
+ *
+ * Why we store an IPFS CID instead of the actual document:
+ *   Putting a PDF on Ethereum would cost thousands of dollars in gas fees.
+ *   Instead, documents go on IPFS and we just store the file's fingerprint (CID).
+ *   If someone tampers with the document, its fingerprint changes — so you can
+ *   always tell if the document has been swapped out.
  */
 contract ProductRegistry {
 
-    // Reference to AccessControl for checking roles
+    // We ask AccessControl before allowing any sensitive action
     SupplyChainAccessControl public accessControl;
 
-    // --- Data Structures ---
+    // ── What a product looks like ────────────────────────────────────────────
 
-    // Lifecycle stages a product can be in
+    // The stages of a product's life
     enum Status {
-        Registered,  // just created by producer
-        Shipped,     // handed off to distributor
+        Registered,  // just created by the producer
+        Shipped,     // handed off to a distributor
         InStorage,   // sitting in a warehouse
-        Delivered,   // reached the end destination
-        Flagged      // under investigation
+        Delivered,   // made it to the final destination
+        Flagged      // something is wrong — under investigation or recalled
     }
 
-    // All info stored for a single product
+    // All the information we store for one product
     struct Product {
         uint256 id;
-        string  batchId;        // producer's batch label
-        address currentOwner;   // who currently holds custody
+        string  batchId;        // the producer's own label, like "BATCH-PHARMA-2024-A"
+        address currentOwner;   // the wallet address of whoever has it right now
         Status  status;
-        string  metadataCID;    // IPFS link to docs (certs, images, etc.)
+        string  metadataCID;    // IPFS fingerprint of the product's document (spec sheet, origin cert, etc.)
         uint256 createdAt;
         uint256 updatedAt;
     }
 
-    // A single entry in the product's provenance trail
+    // One entry in the product's history — records what changed and who did it
     struct HistoryEntry {
-        address actor;          // who made this change
+        address actor;          // the wallet that triggered this change
         Status  statusBefore;
         Status  statusAfter;
-        string  note;           // optional context (location, condition, etc.)
+        string  note;           // optional context: location, condition, reason, etc.
         uint256 timestamp;
     }
 
-    // --- State ---
+    // ── Storage ──────────────────────────────────────────────────────────────
 
-    uint256 private _productCounter;
-    mapping(uint256 => Product)        private _products;
-    mapping(uint256 => HistoryEntry[]) private _history;
+    uint256 private _productCounter;                          // counts up as new products are registered
+    mapping(uint256 => Product)        private _products;     // productId → product data
+    mapping(uint256 => HistoryEntry[]) private _history;      // productId → list of history entries
 
-    // --- Events ---
+    // ── Events ───────────────────────────────────────────────────────────────
+    // We emit events in addition to storing data on-chain.
+    // Events are useful for external services that want to listen for activity in real time.
 
     event ProductRegistered(uint256 indexed productId, string batchId, address indexed producer, string metadataCID);
     event CustodyTransferred(uint256 indexed productId, address indexed from, address indexed to);
     event StatusUpdated(uint256 indexed productId, Status newStatus, address indexed updatedBy);
     event DeliveryConfirmed(uint256 indexed productId, address indexed retailer);
 
-    // Takes AccessControl contract address on deploy
+    // The AccessControl contract address is passed in at deploy time
     constructor(address accessControlAddress) {
         accessControl = SupplyChainAccessControl(accessControlAddress);
     }
 
-    // --- Modifiers ---
+    // ── Guards ───────────────────────────────────────────────────────────────
 
+    // Only producers can register new products
     modifier onlyProducer() {
         require(accessControl.isProducer(msg.sender), "not a producer");
         _;
     }
 
+    // Only retailers can confirm final delivery
     modifier onlyRetailer() {
         require(accessControl.isRetailer(msg.sender), "not a retailer");
         _;
     }
 
+    // Stops people from trying to look up or modify a product that doesn't exist
     modifier productExists(uint256 productId) {
         require(_products[productId].createdAt != 0, "product not found");
         _;
     }
 
-    // --- Write Functions ---
+    // ── Actions ──────────────────────────────────────────────────────────────
 
-    // Producer registers a new product and gets back its on-chain ID
+    /**
+     * @notice A producer registers a new product and gets back its unique ID.
+     *
+     * We immediately add a "registered" entry to the history so that even a brand
+     * new product with no other activity has at least one history entry. That way
+     * the timeline always shows something.
+     */
     function registerProduct(
         string calldata batchId,
         string calldata metadataCID
@@ -113,7 +144,16 @@ contract ProductRegistry {
         emit ProductRegistered(productId, batchId, msg.sender, metadataCID);
     }
 
-    // Current owner (producer on first transfer, distributor afterwards) hands off custody
+    /**
+     * @notice Hands custody of a product to someone else — marks it as Shipped.
+     *
+     * Two checks happen here:
+     * 1. The caller must have a Producer or Distributor role.
+     * 2. The caller must actually be the current owner of the product.
+     *
+     * The second check is important — without it, any distributor could transfer
+     * someone else's product even if they don't have it.
+     */
     function transferCustody(
         uint256 productId,
         address newOwner,
@@ -138,7 +178,14 @@ contract ProductRegistry {
         emit StatusUpdated(productId, Status.Shipped, msg.sender);
     }
 
-    // Any authorized stakeholder can log a status change with an optional note
+    /**
+     * @notice Any authorized stakeholder can log a status update with a note.
+     *
+     * This is useful for things like:
+     * - A warehouse logging "arrived at cold storage in Memphis"
+     * - A regulator flagging a product: "recalled due to contamination"
+     * - A distributor noting a delay: "held at customs"
+     */
     function updateStatus(
         uint256 productId,
         Status  newStatus,
@@ -159,7 +206,14 @@ contract ProductRegistry {
         emit StatusUpdated(productId, newStatus, msg.sender);
     }
 
-    // Retailer marks the product as delivered at the final destination
+    /**
+     * @notice The retailer confirms that the product has arrived.
+     *
+     * We made this a separate function (instead of just calling updateStatus with Delivered)
+     * because we want to make sure only a Retailer can close out the journey.
+     * A producer or distributor shouldn't be able to mark something as delivered
+     * when it's still sitting in a warehouse.
+     */
     function confirmDelivery(
         uint256 productId,
         string calldata note
@@ -175,19 +229,19 @@ contract ProductRegistry {
         emit StatusUpdated(productId, Status.Delivered, msg.sender);
     }
 
-    // --- Read Functions (open to everyone) ---
+    // ── Reading data (anyone can call these, no wallet needed) ───────────────
 
-    // Returns current product data
+    // Returns the current snapshot of a product — owner, status, metadata, timestamps
     function getProduct(uint256 productId) external view productExists(productId) returns (Product memory) {
         return _products[productId];
     }
 
-    // Returns the full history trail for a product in chronological order
+    // Returns the full history list in order — first entry is always the registration
     function getHistory(uint256 productId) external view productExists(productId) returns (HistoryEntry[] memory) {
         return _history[productId];
     }
 
-    // Returns how many products have been registered so far
+    // Returns how many products have been registered — used by the frontend counter in the header
     function totalProducts() external view returns (uint256) {
         return _productCounter;
     }
