@@ -73,6 +73,15 @@
   font-weight: 600;
 }
 
+.roleBadge {
+  background: #e0cffc;
+  color: #4a0e8f;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .warning {
   background: #fff3cd;
   border: 1px solid #ffc107;
@@ -243,6 +252,19 @@
 
 .certValid  { background: #d1e7dd; border: 1px solid #a3cfbb; }
 .certRevoked { background: #f8d7da; border: 1px solid #f1aeb5; }
+
+.qrBox {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.qrLabel {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
 /* Form styles (used in sub-components) */
 .formGroup {
