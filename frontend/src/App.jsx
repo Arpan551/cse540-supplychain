@@ -3,27 +3,32 @@
 // Connects to MetaMask, reads live on-chain data from ProductRegistry
 // and VerificationLog contracts deployed on Hardhat local network or Sepolia.
 
-<<<<<<< HEAD
-=======
-//testing
->>>>>>> 0b8dcc4a1f2cc5c6afd970d89a91e8bd1ea2e432
 import { useState, useEffect } from "react";
 import { useContracts, CONTRACT_ADDRESSES } from "./useContracts.js";
 import ProvenanceTimeline from "./components/ProvenanceTimeline.jsx";
 import RegisterProduct from "./components/RegisterProduct.jsx";
 import TransferCustody from "./components/TransferCustody.jsx";
 import ConfirmDelivery from "./components/ConfirmDelivery.jsx";
+import IssueCertification from "./components/IssueCertification.jsx";
+import UpdateStatus from "./components/UpdateStatus.jsx";
+import AdminPanel from "./components/AdminPanel.jsx";
 import styles from "./App.module.css";
 
-<<<<<<< HEAD
-=======
-//app module.css
->>>>>>> 0b8dcc4a1f2cc5c6afd970d89a91e8bd1ea2e432
 const STATUS_LABELS = ["Registered", "Shipped", "InStorage", "Delivered", "Flagged"];
 const STATUS_COLORS = ["#6c757d", "#0d6efd", "#0dcaf0", "#198754", "#dc3545"];
 
+function ipfsLink(cid) {
+  if (!cid) return null;
+  const hash = cid.replace(/^ipfs:\/\//, "");
+  return `https://ipfs.io/ipfs/${hash}`;
+}
+
+function qrUrl(text) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(text)}`;
+}
+
 export default function App() {
-  const { account, signer, provider, error: walletError, connect, registry, verificationLog } =
+  const { account, signer, error: walletError, connect, registry, verificationLog, accessControl } =
     useContracts();
 
   const [tab, setTab]               = useState("lookup");
@@ -34,6 +39,7 @@ export default function App() {
   const [loading, setLoading]       = useState(false);
   const [statusMsg, setStatusMsg]   = useState("");
   const [totalProducts, setTotal]   = useState(null);
+  const [walletRole, setWalletRole] = useState(null);
 
   const addressesConfigured =
     CONTRACT_ADDRESSES.productRegistry && CONTRACT_ADDRESSES.verificationLog;
@@ -45,6 +51,27 @@ export default function App() {
       .then((n) => setTotal(Number(n)))
       .catch(() => {});
   }, [registry]);
+
+  // Detect the connected wallet's role for the role badge
+  useEffect(() => {
+    if (!accessControl || !account) { setWalletRole(null); return; }
+    async function detectRole() {
+      try {
+        const [isProd, isDist, isRet, isReg] = await Promise.all([
+          accessControl.isProducer(account),
+          accessControl.isDistributor(account),
+          accessControl.isRetailer(account),
+          accessControl.isRegulator(account),
+        ]);
+        if (isProd)  setWalletRole("Producer");
+        else if (isDist) setWalletRole("Distributor");
+        else if (isRet)  setWalletRole("Retailer");
+        else if (isReg)  setWalletRole("Regulator");
+        else setWalletRole("Consumer");
+      } catch { setWalletRole(null); }
+    }
+    detectRole();
+  }, [accessControl, account]);
 
   async function lookupProduct() {
     if (!registry) { setStatusMsg("Connect wallet first."); return; }
@@ -122,9 +149,14 @@ export default function App() {
       {/* Wallet bar */}
       <div className={styles.walletBar}>
         {account ? (
-          <span className={styles.connected}>
-            Connected: {account.slice(0, 6)}…{account.slice(-4)}
-          </span>
+          <>
+            <span className={styles.connected}>
+              Connected: {account.slice(0, 6)}…{account.slice(-4)}
+            </span>
+            {walletRole && (
+              <span className={styles.roleBadge}>{walletRole}</span>
+            )}
+          </>
         ) : (
           <button className={styles.btnPrimary} onClick={connect}>
             Connect MetaMask
@@ -148,7 +180,10 @@ export default function App() {
           ["lookup",   "Lookup Product"],
           ["register", "Register Product"],
           ["transfer", "Transfer Custody"],
-          ["deliver",  "Confirm Delivery"],
+          ["deliver",   "Confirm Delivery"],
+          ["status",    "Update Status"],
+          ["regulator", "Regulator"],
+          ["admin",     "Admin"],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -192,19 +227,43 @@ export default function App() {
           {product && (
             <div className={styles.card}>
               <div className={styles.cardHeader}>
-                <h3>Product #{product.id} — {product.batchId}</h3>
-                <span
-                  className={styles.badge}
-                  style={{ background: STATUS_COLORS[product.status] }}
-                >
-                  {STATUS_LABELS[product.status]}
-                </span>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ margin: "0 0 6px" }}>Product #{product.id} — {product.batchId}</h3>
+                  <span
+                    className={styles.badge}
+                    style={{ background: STATUS_COLORS[product.status] }}
+                  >
+                    {STATUS_LABELS[product.status]}
+                  </span>
+                </div>
+                {/* QR code encodes the product ID for easy consumer scanning */}
+                <div className={styles.qrBox}>
+                  <img
+                    src={qrUrl(`Product ID: ${product.id} | Batch: ${product.batchId}`)}
+                    alt={`QR code for product ${product.id}`}
+                    width={120}
+                    height={120}
+                  />
+                  <p className={styles.qrLabel}>Scan to verify</p>
+                </div>
               </div>
+
               <dl className={styles.dl}>
                 <dt>Current Owner</dt>
                 <dd className={styles.mono}>{product.currentOwner}</dd>
                 <dt>Metadata (IPFS)</dt>
-                <dd className={styles.mono}>{product.metadataCID || "—"}</dd>
+                <dd>
+                  {product.metadataCID ? (
+                    <a
+                      href={ipfsLink(product.metadataCID)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={styles.mono}
+                    >
+                      {product.metadataCID}
+                    </a>
+                  ) : "—"}
+                </dd>
                 <dt>Registered</dt>
                 <dd>{product.createdAt}</dd>
                 <dt>Last Updated</dt>
@@ -221,7 +280,18 @@ export default function App() {
                         <strong>{c.certType}</strong> (cert #{c.certId})
                         {" "}{c.isValid ? "✓ Valid" : "✗ Revoked"} · {c.issuedAt}
                         <br />
-                        <span className={styles.mono}>{c.documentCID}</span>
+                        {c.documentCID ? (
+                          <a
+                            href={ipfsLink(c.documentCID)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={styles.mono}
+                          >
+                            {c.documentCID}
+                          </a>
+                        ) : (
+                          <span className={styles.mono}>{c.documentCID}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -262,6 +332,27 @@ export default function App() {
       {tab === "deliver" && (
         <section className={styles.section}>
           <ConfirmDelivery registry={registry} signer={signer} />
+        </section>
+      )}
+
+      {/* ── Tab: Update Status ── */}
+      {tab === "status" && (
+        <section className={styles.section}>
+          <UpdateStatus registry={registry} signer={signer} />
+        </section>
+      )}
+
+      {/* ── Tab: Regulator ── */}
+      {tab === "regulator" && (
+        <section className={styles.section}>
+          <IssueCertification verificationLog={verificationLog} signer={signer} />
+        </section>
+      )}
+
+      {/* ── Tab: Admin ── */}
+      {tab === "admin" && (
+        <section className={styles.section}>
+          <AdminPanel accessControl={accessControl} signer={signer} />
         </section>
       )}
     </div>
